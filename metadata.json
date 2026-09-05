@@ -1,0 +1,6 @@
+{
+  "name": "محول وصائق النصوص الاحترافي",
+  "description": "منصة ذكية متكاملة لتحويل وتنسيق الكتابة وإعادة صياغة النصوص، تحويل الخط اليدوي والصور والتسجيلات الصوتية إلى نصوص بأسلوب احترافي.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
