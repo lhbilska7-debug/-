@@ -389,6 +389,95 @@ app.post("/api/summarize-lesson", async (req, res) => {
   }
 });
 
+// 5b. Generate Exam from Lesson API (امتحان مستخرج من محتوى الدرس)
+app.post("/api/generate-lesson-exam", async (req, res) => {
+  try {
+    const {
+      lessonText,
+      subject = "عام",
+      level = "ثانوي/بكالوريا",
+      examFormat = "standard", // standard, qcm, express, challenging
+      includeGradingScheme = true,
+      questionCount = "standard",
+      imageData,
+    } = req.body;
+
+    if ((!lessonText || typeof lessonText !== "string" || lessonText.trim().length === 0) && !imageData) {
+      return res.status(400).json({ error: "الرجاء إدخال نص الدرس أو صورة صفحة الدرس لتوليد الامتحان." });
+    }
+
+    const ai = getGenAI();
+
+    let formatDesc = "";
+    if (examFormat === "qcm") {
+      formatDesc = `اختبار بنظام الاختيار من متعدد (QCM): يتكون من 8 إلى 10 أسئلة دقيقة مستوحاة من تفاصيل ومفاهيم الدرس، مع 4 خيارات لكل سؤال (أ، ب، ج، د)، ثم ملحق للإجابات الصحيحة وتفسير سبب صحتها.`;
+    } else if (examFormat === "express") {
+      formatDesc = `اختبار سريع (Quick Quiz 10 دقائق): 4 إلى 5 أسئلة مباشرة وسريعة لقياس مدى الاستيعاب الفوري لنقاط الدرس الأساسية مع حلها النموذجي المختصر.`;
+    } else if (examFormat === "challenging") {
+      formatDesc = `امتحان متميز وتطبيقي متقدم: يركز على الفهم العميق، الاستنتاج، المقارنة، وتطبيق المعارف على وضعيات ومسائل غير مسبوقة مستخرجة من جوهر الدرس، مع سلم تنقيط دقيق.`;
+    } else {
+      formatDesc = `فرض / امتحان رسمي نموذجي شامل (على 20 نقطة) مقسم كالتالي:
+- الجزء الأول: استرداد المعارف والتعريفات والمصطلحات الأساسية (6 نقاط).
+- الجزء الثاني: أسئلة الفهم والتحليل والتطبيق المباشر على معطيات الدرس (8 نقاط).
+- الجزء الثالث: سؤال تركيبي أو وضعية إدماجية / مسألة تقويمية (6 نقاط).
+- ملحق نهائي: عناصر الإجابة النموذجية وسلم التنقيط المفصل خطوة بخطوة.`;
+    }
+
+    let promptText = `أنت مفتش تربوي وأستاذ أول متخصص في وضع الامتحانات الرسمية والاختبارات التقييمية لجميع المناهج والمستويات الدراسية.
+المادة: ${subject}
+المستوى الدراسي المستهدف: ${level}
+طبيعة ونوع الامتحان المطلوب:
+${formatDesc}
+
+تعليمات مهمة لصياغة الامتحان:
+1. استخرج الأسئلة حصرياً وبدقة من المعارف والأفكار والقوانين الواردة في هذا الدرس المرفق.
+2. ضع وزناً عددياً (النقاط) بجانب كل سؤال ليحاكي الامتحانات الرسمية.
+3. اكتب عنواناً واضحاً للامتحان (مثال: فرض تقويمي في مادة ${subject} - موضوع: [عنوان مستوحى من الدرس]).
+4. ${includeGradingScheme ? "يجب أن ترفق في نهاية ورقة الامتحان قسماً مستقلاً بعنوان '## 📝 عناصر الإجابة النموذجية وسلم التنقيط' يوضح الإجابة الشافية لكل سؤال وكيفية توزيع النقاط." : "اقتصر على ورقة الأسئلة فقط دون إرفاق الحلول."}
+5. نسق المحتوى بدقة وعناية باستخدام عناوين Markdown وقوائم منسقة لتسهيل الطباعة والمراجعة.`;
+
+    const contents: any[] = [];
+    if (imageData) {
+      const cleanedBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
+      contents.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: cleanedBase64,
+        },
+      });
+      promptText += `\nملاحظة: نص ومفردات الدرس مأخوذة من صورة الدرس المرفقة، اقرأها بدقة واصنع منها الامتحان المطلوب.\n`;
+    }
+
+    if (lessonText && lessonText.trim().length > 0) {
+      promptText += `\nمحتوى الدرس المستند عليه في صياغة الامتحان:\n"""\n${lessonText}\n"""\n`;
+    }
+
+    contents.push(promptText);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        temperature: 0.3,
+      },
+    });
+
+    const examPaper = response.text || "تعذر توليد الامتحان من هذا الدرس.";
+
+    return res.json({
+      examText: examPaper,
+      subject,
+      level,
+      examFormat,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/generate-lesson-exam:", error);
+    return res.status(500).json({
+      error: error.message || "حدث خطأ أثناء توليد الامتحان من الدرس.",
+    });
+  }
+});
+
 // 6. Exam & Quiz Solver API
 app.post("/api/solve-exam", async (req, res) => {
   try {
@@ -451,6 +540,96 @@ app.post("/api/solve-exam", async (req, res) => {
     console.error("Error in /api/solve-exam:", error);
     return res.status(500).json({
       error: error.message || "حدث خطأ أثناء حل الامتحان.",
+    });
+  }
+});
+
+// 7. Ask AI (المعلم والمساعد الذكي للطلاب)
+app.post("/api/ask-ai", async (req, res) => {
+  try {
+    const {
+      question,
+      subject = "عام",
+      history = [],
+      imageData,
+    } = req.body;
+
+    if ((!question || typeof question !== "string" || question.trim().length === 0) && !imageData) {
+      return res.status(400).json({ error: "الرجاء كتابة سؤالك أو إرفاق صورة للاستفسار عنها." });
+    }
+
+    const ai = getGenAI();
+
+    let systemPrompt = `أنت "معلم الذكاء الاصطناعي الذكي" (Smart AI Tutor)، رفيق تعليمي تفاعلي وودود ومتمكن جداً لجميع الطلاب والتلاميذ بمختلف المستويات والمناهج الدراسية.
+المادة / المجال: ${subject}
+
+إرشاداتك في الإجابة:
+1. الشرح المبسط والواضح: بسّط المفاهيم المعقدة خطوة بخطوة مع أمثلة واقعية وسهلة الفهم.
+2. الدقة العلمية والتربوية: تقديم معلومات صحيحة، مع إبراز القوانين أو القواعد أو المعطيات المهمة بخط عريض.
+3. التفاعل والتشجيع: اختم إجابتك دائماً بسؤال تحفيزي أو نصيحة دراسية ذكية لتثبيت الفهم.
+4. التنسيق: استخدم Markdown مع عناوين واضحة وقوائم نقطية لتسهيل القراءة السريعة.
+إذا كان السؤال عن مسألة أو تمرين، اشرح طريقة التفكير قبل إعطاء النتيجة.`;
+
+    const contents: any[] = [];
+
+    // Add prior conversation turns if available
+    if (Array.isArray(history) && history.length > 0) {
+      // Add last few turns
+      const recentTurns = history.slice(-6);
+      for (const turn of recentTurns) {
+        if (turn.text && turn.role) {
+          contents.push({
+            role: turn.role === "assistant" || turn.role === "model" ? "model" : "user",
+            parts: [{ text: turn.text }],
+          });
+        }
+      }
+    }
+
+    const userParts: any[] = [];
+    if (imageData) {
+      const cleanedBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
+      userParts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: cleanedBase64,
+        },
+      });
+      userParts.push({
+        text: `المرفق: صورة مرفقة مع السؤال.\n`,
+      });
+    }
+
+    if (question && question.trim().length > 0) {
+      userParts.push({
+        text: question.trim(),
+      });
+    }
+
+    contents.push({
+      role: "user",
+      parts: userParts,
+    });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.5,
+      },
+    });
+
+    const answer = response.text || "عذراً، لم أتمكن من صياغة إجابة مناسبة حالياً.";
+
+    return res.json({
+      answer,
+      subject,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/ask-ai:", error);
+    return res.status(500).json({
+      error: error.message || "حدث خطأ أثناء التواصل مع المعلم الذكي.",
     });
   }
 });

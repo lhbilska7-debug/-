@@ -1,4 +1,4 @@
-export type AppMode = "transform" | "lesson_summary" | "exam_solver" | "tts" | "ocr" | "voice" | "templates";
+export type AppMode = "lesson_summary" | "exam_solver" | "ask_ai";
 
 export type ToneType = "formal" | "academic" | "persuasive" | "creative" | "concise" | "diplomatic";
 

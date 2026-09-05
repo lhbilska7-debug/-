@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { Navbar } from "./components/Navbar";
-import { TextTransformMode } from "./components/TextTransformMode";
-import { TextToSpeechMode } from "./components/TextToSpeechMode";
 import { LessonSummarizerMode } from "./components/LessonSummarizerMode";
 import { ExamSolverMode } from "./components/ExamSolverMode";
-import { OcrHandwritingMode } from "./components/OcrHandwritingMode";
-import { VoiceToTextMode } from "./components/VoiceToTextMode";
-import { TemplatesMode } from "./components/TemplatesMode";
+import { AskAiMode } from "./components/AskAiMode";
 import { OutputViewer } from "./components/OutputViewer";
 import { HistoryDrawer } from "./components/HistoryDrawer";
 import { AdBanner } from "./components/AdBanner";
 import { AdManagerModal } from "./components/AdManagerModal";
 import { ServiceNavigationGrid } from "./components/ServiceNavigationGrid";
-import { AppMode, TransformConfig, TransformResult } from "./types";
-import { Sparkles, AlertCircle, ShieldCheck, Zap, BookOpen, Layers } from "lucide-react";
+import { AppMode, TransformResult } from "./types";
+import { Sparkles, AlertCircle, ShieldCheck, BookOpen, CheckSquare, Bot } from "lucide-react";
 
 export default function App() {
-  const [currentMode, setCurrentMode] = useState<AppMode>("transform");
+  const [currentMode, setCurrentMode] = useState<AppMode>("lesson_summary");
   const [currentResult, setCurrentResult] = useState<TransformResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,79 +43,6 @@ export default function App() {
       console.error("Failed to save history", e);
     }
   }, [history]);
-
-  // Handle Main Text Transform Request
-  const handleTransform = async (text: string, config: TransformConfig) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/transform-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          tone: config.tone,
-          action: config.action,
-          tashkeel: config.tashkeel,
-          targetDialect: config.convertToMsa ? "msa" : "original",
-          customInstructions: config.customInstructions,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "حدث خطأ أثناء معالجة النص.");
-      }
-
-      const newResult: TransformResult = {
-        id: "tr-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
-        originalText: text,
-        transformedText: data.transformedText,
-        notes: data.notes,
-        tone: config.tone,
-        action: config.action,
-        timestamp: Date.now(),
-        sourceType: "text",
-      };
-
-      setCurrentResult(newResult);
-      setHistory((prev) => [newResult, ...prev]);
-
-      // Scroll smoothly down to the result viewer
-      window.scrollTo({ top: 400, behavior: "smooth" });
-    } catch (err: any) {
-      setError(err.message || "فشلت عملية صياغة النص. الرجاء إعادة المحاولة.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle OCR Extraction & Transform
-  const handleOcrComplete = (extractedText: string) => {
-    // Automatically trigger transform on extracted text or set it
-    const config: TransformConfig = {
-      tone: "formal",
-      action: "rewrite",
-      tashkeel: "none",
-      convertToMsa: true,
-      customInstructions: "نسق النص المستخرج كفقرات مرتبة وأزِل أي رموز طابعة خاطئة.",
-    };
-    handleTransform(extractedText, config);
-  };
-
-  // Handle Audio Transcribe & Transform
-  const handleAudioTranscribed = (transcribedText: string) => {
-    const config: TransformConfig = {
-      tone: "formal",
-      action: "rewrite",
-      tashkeel: "none",
-      convertToMsa: true,
-      customInstructions: "قم بتنسيق المقطع المفرغ هجائياً ونحوياً بأسلوب بليغ.",
-    };
-    handleTransform(transcribedText, config);
-  };
 
   const handleToggleFavorite = (id: string) => {
     setHistory((prev) =>
@@ -153,7 +76,6 @@ export default function App() {
           setError(null);
         }}
         onOpenHistory={() => setIsHistoryOpen(true)}
-        onOpenAdManager={() => setIsAdManagerOpen(true)}
         savedCount={history.length}
       />
 
@@ -192,11 +114,7 @@ export default function App() {
           {/* Primary Workspace (Takes 3 columns when sidebar is active) */}
           <div className={`${showSidebarAd ? "lg:col-span-3" : ""} space-y-6`}>
             {/* Mode Renderer */}
-            <div className="grid grid-cols-1 gap-8">
-              {currentMode === "transform" && (
-                <TextTransformMode onTransform={handleTransform} isLoading={isLoading} />
-              )}
-
+            <div className="grid grid-cols-1 gap-6">
               {currentMode === "lesson_summary" && (
                 <LessonSummarizerMode
                   onSummarizeComplete={(res) => {
@@ -221,34 +139,16 @@ export default function App() {
                 />
               )}
 
-              {currentMode === "tts" && (
-                <TextToSpeechMode
+              {currentMode === "ask_ai" && (
+                <AskAiMode
+                  onSaveToHistory={(res) => {
+                    setCurrentResult(res);
+                    setHistory((prev) => [res, ...prev]);
+                  }}
                   isLoading={isLoading}
                   setIsLoading={setIsLoading}
                   setError={setError}
                 />
-              )}
-
-              {currentMode === "ocr" && (
-                <OcrHandwritingMode
-                  onOcrComplete={handleOcrComplete}
-                  isLoading={isLoading}
-                  setIsLoading={setIsLoading}
-                  setError={setError}
-                />
-              )}
-
-              {currentMode === "voice" && (
-                <VoiceToTextMode
-                  onAudioTranscribed={handleAudioTranscribed}
-                  isLoading={isLoading}
-                  setIsLoading={setIsLoading}
-                  setError={setError}
-                />
-              )}
-
-              {currentMode === "templates" && (
-                <TemplatesMode onGenerateDocument={handleTransform} isLoading={isLoading} />
               )}
             </div>
 
